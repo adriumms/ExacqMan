@@ -1,6 +1,6 @@
 """ExacqMan: extract, timelapse, and compress footage from ExacqVision servers."""
 
-__version__ = "3.4.3"
+__version__ = "3.4.4"
 
 # Default TCP port for the web UI (`exacqman-web start`). This is the fallback
 # used when neither a `--port` flag nor a `[settings].port` config value is set,
