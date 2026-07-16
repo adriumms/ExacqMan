@@ -2,18 +2,18 @@ certifi==2024.12.14
 charset-normalizer==3.4.1
 colorama==0.4.6
 decorator==5.1.1
-idna==3.10
+idna==3.15
 imageio==2.37.0
 imageio-ffmpeg==0.6.0
 moviepy @ git+https://github.com/Zulko/moviepy.git@4dd5fe44b47a4a2f42eebc8b5eadd74a25001853
 numpy==2.2.2
 opencv-python==4.11.0.86
-pillow==10.4.0
+pillow==12.2.0
 proglog==0.1.10
 python-dateutil==2.9.0.post0
-python-dotenv==1.0.1
-requests==2.32.3
+python-dotenv==1.2.2
+requests==2.33.0
 six==1.17.0
 tqdm==4.67.1
 tzdata==2025.1
-urllib3==2.3.0
+urllib3==2.7.0
