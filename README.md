@@ -133,7 +133,7 @@ Run `exacqman --help` (or `exacqman <command> --help`) for full options. Five co
 exacqman extract server camera_alias [date] [start] [end] [config_file] \
   [--config CONFIG] [--credentials CREDENTIALS] \
   [-o OUTPUT_NAME] [--output-dir DIR] [--quality {low,medium,high}] \
-  [--multiplier N] [-c {true,false}] [--caption TEXT]
+  [--multiplier N] [-c {true,false}] [--caption TEXT] [--no-text]
 ```
 
 - `server` (required, first positional): server name, must match a top-level `[<server>]` table.
@@ -142,7 +142,7 @@ exacqman extract server camera_alias [date] [start] [end] [config_file] \
 - `--start-iso-datetime` / `--end-iso-datetime`: ISO 8601 datetimes (e.g. `2026-05-27T09:30:00-04:00`). When given together they replace the positional `date`/`start`/`end` form with full, unambiguous precision — intended for programmatic callers (the web UI uses these).
 - `-o, --output_name`: output filename. When omitted, a canonical `{YYYY-MM-DD}_{HHMM}_{server}_{camera}_{multiplier}x.mp4` name is built.
 - `--output-dir`: deliver a single clean `{name}.mp4` into this directory (intermediates removed). Defaults to the current directory.
-- `--quality`, `--multiplier`, `-c/--crop {true,false}`, `--caption`.
+- `--quality`, `--multiplier`, `-c/--crop {true,false}`, `--caption`, `--no-text` (skip timestamp and caption overlays).
 
 ### compress
 
@@ -153,7 +153,7 @@ exacqman compress video_filename {low,medium,high} [-o OUTPUT_NAME]
 ### timelapse
 
 ```bash
-exacqman timelapse video_filename multiplier [-o OUTPUT_NAME] [-c {true,false}] [--caption TEXT]
+exacqman timelapse video_filename multiplier [-o OUTPUT_NAME] [-c {true,false}] [--caption TEXT] [--no-text]
 ```
 
 ### crop
