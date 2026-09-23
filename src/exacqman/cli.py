@@ -58,6 +58,7 @@ class Settings:
     font_weight: int = 3                # Overlay stroke weight on a 1-5 scale (1 = thinnest, 5 = heaviest)
     caption: str = None                 # Optional caption rendered below the timestamp
     caption_limit = 30                  # Max number of characters for caption
+    no_text: bool = False               # When True, skip timestamp and caption overlays
 
     server: str = None                  # Server name (must match a top-level [<server>] table)
     server_ip: str = None               # URL of the chosen Exacqvision server
@@ -196,6 +197,10 @@ class Settings:
                 arg_value='caption',
                 cls_value=cls.caption,
             ),
+            no_text=bool(set_value(
+                arg_value='no_text',
+                cls_value=cls.no_text,
+            )),
 
             server=server,
             server_ip=server_ip,
@@ -483,9 +488,10 @@ def _write_crop_to_config(
 
 def process_video(original_video_path: str, output_video_path: str = None, timestamps: list[datetime] = None) -> str:
     """
-    Processes a video by cropping, timelapsing, and timestamping it based on attributes of the settings object.
+    Processes a video by cropping and timelapsing it based on attributes of the settings object.
 
-    If timestamps are provided, they are added to the video.
+    If timestamps are provided and ``settings.no_text`` is false, they (and any
+    caption) are burned into each frame as overlays.
 
     Args:
         original_video_path (str):                  The filepath of the original video.
@@ -614,42 +620,46 @@ def process_video(original_video_path: str, output_video_path: str = None, times
         x, y = 0, 0
 
     total_frames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))
-    if timestamps:
+    overlay_text = timestamps and not settings.no_text
+    if overlay_text:
         number_of_timestamps = len(timestamps)
 
-    font_scale = calculate_font_scale(crop_width, crop_height, settings.caption)
-    ts_thickness = line_thickness(font_scale)
+        font_scale = calculate_font_scale(crop_width, crop_height, settings.caption)
+        ts_thickness = line_thickness(font_scale)
 
-    # Pre-compute caption layout once. The caption text and font scale don't
-    # change frame-to-frame, so measuring inside the render loop would be
-    # wasteful. We anchor the caption directly below the timestamp using a
-    # natural single-line leading (~25% of the timestamp's text height).
-    caption_font_scale = font_scale * 0.8 if settings.caption else None
-    caption_thickness = line_thickness(caption_font_scale) if settings.caption else None
-    caption_x = None
-    caption_y_offset = None
-    if settings.caption:
-        (caption_w, caption_h), _ = cv2.getTextSize(
-            settings.caption,
-            cv2.FONT_HERSHEY_SIMPLEX,
-            caption_font_scale,
-            caption_thickness,
-        )
-        # Use a representative timestamp string to derive the line gap. Real
-        # per-frame timestamps differ only in their digit values so their
-        # vertical metrics are stable.
-        sample_ts = datetime(2025, 1, 1, 12, 0, 0).strftime('%Y-%m-%d %H:%M:%S')
-        (_, sample_ts_h), sample_ts_baseline = cv2.getTextSize(
-            sample_ts,
-            cv2.FONT_HERSHEY_SIMPLEX,
-            font_scale,
-            ts_thickness,
-        )
-        line_gap = max(2, int(sample_ts_h * 0.25))
-        caption_x = (crop_width - caption_w) // 2
-        # Offset from the timestamp baseline (cv2 putText's y arg) down to the
-        # caption's own baseline: descender of the timestamp + gap + caption height.
-        caption_y_offset = sample_ts_baseline + line_gap + caption_h
+        # Pre-compute caption layout once. The caption text and font scale don't
+        # change frame-to-frame, so measuring inside the render loop would be
+        # wasteful. We anchor the caption directly below the timestamp using a
+        # natural single-line leading (~25% of the timestamp's text height).
+        caption_font_scale = font_scale * 0.8 if settings.caption else None
+        caption_thickness = line_thickness(caption_font_scale) if settings.caption else None
+        caption_x = None
+        caption_y_offset = None
+        if settings.caption:
+            (caption_w, caption_h), _ = cv2.getTextSize(
+                settings.caption,
+                cv2.FONT_HERSHEY_SIMPLEX,
+                caption_font_scale,
+                caption_thickness,
+            )
+            # Use a representative timestamp string to derive the line gap. Real
+            # per-frame timestamps differ only in their digit values so their
+            # vertical metrics are stable.
+            sample_ts = datetime(2025, 1, 1, 12, 0, 0).strftime('%Y-%m-%d %H:%M:%S')
+            (_, sample_ts_h), sample_ts_baseline = cv2.getTextSize(
+                sample_ts,
+                cv2.FONT_HERSHEY_SIMPLEX,
+                font_scale,
+                ts_thickness,
+            )
+            line_gap = max(2, int(sample_ts_h * 0.25))
+            caption_x = (crop_width - caption_w) // 2
+            # Offset from the timestamp baseline (cv2 putText's y arg) down to the
+            # caption's own baseline: descender of the timestamp + gap + caption height.
+            caption_y_offset = sample_ts_baseline + line_gap + caption_h
+    else:
+        font_scale = ts_thickness = caption_font_scale = caption_thickness = None
+        caption_x = caption_y_offset = None
 
     reporter.stage(
         "timelapsing",
@@ -672,7 +682,7 @@ def process_video(original_video_path: str, output_video_path: str = None, times
         else:
             finished_frame = frame
 
-        if timestamps:
+        if overlay_text:
             frame_position = vid.get(cv2.CAP_PROP_POS_FRAMES)
             # Some containers report an unreliable frame count (0 or negative)
             # even when frames decode fine; fall back to the running count so
@@ -925,6 +935,10 @@ def parse_arguments():
     extract_parser.add_argument('--multiplier', type=int, help='Desired timelapse multiplier (must be a positive integer)')
     extract_parser.add_argument('-c', '--crop', type=_parse_bool_flag, default=None, metavar='{true,false}', help='Crop the video (true/false). When unset, defers to [settings].default_crop in the config. Uses per-camera crop_dimensions, falling back to default_crop_dimensions; prompts if neither is set.')
     extract_parser.add_argument('--caption', type=str, help=f'Add caption below timestamp (max of {Settings.caption_limit} chars)')
+    extract_parser.add_argument(
+        '--no-text', dest='no_text', action='store_true',
+        help='Skip timestamp and caption overlays; output timelapsed footage only.',
+    )
 
     # Compress subcommand
     compress_parser = subparsers.add_parser('compress', help='Compress a video file')
@@ -939,6 +953,10 @@ def parse_arguments():
     timelapse_parser.add_argument('-o', '--output_name', default=None, type=str, help='Desired filepath')
     timelapse_parser.add_argument('-c', '--crop', type=_parse_bool_flag, default=None, metavar='{true,false}', help='Crop the video (true/false). When unset, defers to [settings].default_crop in the config. Uses per-camera crop_dimensions, falling back to default_crop_dimensions; prompts if neither is set.')
     timelapse_parser.add_argument('--caption', type=str, help=f'Add caption below timestamp (max of {Settings.caption_limit} chars)')
+    timelapse_parser.add_argument(
+        '--no-text', dest='no_text', action='store_true',
+        help='Skip timestamp and caption overlays; output timelapsed footage only.',
+    )
 
     # Crop subcommand: grab a recent frame from a camera and open the
     # interactive ROI selector to capture crop dimensions, without running
@@ -1757,7 +1775,7 @@ def main():
 
     # Enforce caption length on the effective post-merge value so the rule
     # applies uniformly regardless of source (CLI --caption or [settings] caption).
-    if settings.caption and len(settings.caption) > Settings.caption_limit:
+    if settings.caption and not settings.no_text and len(settings.caption) > Settings.caption_limit:
         reporter.error(
             "CaptionTooLong",
             (
@@ -1956,16 +1974,19 @@ def main():
                         video_filename=settings.output_filename,
                         output_dir=tmp_subdir,
                     )
-                    # The auth token can expire during a long download, so we
-                    # re-authenticate with a fresh client for the timestamp
-                    # query. Close the first session before swapping the
-                    # reference so it is never leaked.
-                    try:
-                        exapi.logout()
-                    except Exception:
-                        pass
-                    exapi = Exacqvision(settings.server_ip, settings.username, settings.password, timezone)
-                    video_timestamps = exapi.get_timestamps(settings.camera_id, start, end)
+                    if settings.no_text:
+                        video_timestamps = None
+                    else:
+                        # The auth token can expire during a long download, so we
+                        # re-authenticate with a fresh client for the timestamp
+                        # query. Close the first session before swapping the
+                        # reference so it is never leaked.
+                        try:
+                            exapi.logout()
+                        except Exception:
+                            pass
+                        exapi = Exacqvision(settings.server_ip, settings.username, settings.password, timezone)
+                        video_timestamps = exapi.get_timestamps(settings.camera_id, start, end)
                 except (ExacqvisionError, RequestException) as e:
                     reporter.error(
                         "ExacqvisionError",
